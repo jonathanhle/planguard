@@ -11,7 +11,8 @@ import (
 	"github.com/jonathanhle/planguard/pkg/scanner"
 )
 
-const version = "1.0.0"
+// Version is set at build time
+var version = "dev"
 
 func main() {
 	// Command-line flags

@@ -16,7 +16,8 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o planguard ./cmd/planguard
+ARG VERSION=dev
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o planguard ./cmd/planguard
 
 # Create final lightweight image
 FROM alpine:latest
