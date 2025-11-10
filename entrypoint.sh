@@ -1,16 +1,19 @@
 #!/bin/sh
-set -e
 
-# Run planguard and capture output
-OUTPUT=$(/usr/local/bin/planguard "$@")
+# Run planguard and capture output and exit code
+/usr/local/bin/planguard "$@" > /tmp/planguard-output.txt
+EXIT_CODE=$?
 
-# If format is SARIF, write to file
+# Read the output
+OUTPUT=$(cat /tmp/planguard-output.txt)
+
+# If format is SARIF, write to file in workspace
 if echo "$@" | grep -q "\-format sarif"; then
-    echo "$OUTPUT" > planguard-results.sarif
+    echo "$OUTPUT" > /github/workspace/planguard-results.sarif
 fi
 
 # Always print output to stdout
 echo "$OUTPUT"
 
 # Exit with planguard's exit code
-exit $?
+exit $EXIT_CODE
