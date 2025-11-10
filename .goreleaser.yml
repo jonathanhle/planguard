@@ -95,3 +95,12 @@ docker_manifests:
     image_templates:
       - "ghcr.io/jonathanhle/planguard:latest-amd64"
       - "ghcr.io/jonathanhle/planguard:latest-arm64"
+
+brews:
+  - name: planguard
+    repository:
+      owner: jonathanhle
+      name: homebrew-tap
+    description: "Pre-plan Terraform security scanner"
+    homepage: "https://github.com/jonathanhle/planguard"
+    license: "MIT"
