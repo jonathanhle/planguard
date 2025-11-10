@@ -1,0 +1,54 @@
+name: Example - Using Planguard Action
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # Example 1: Basic usage
+  basic-scan:
+    name: Basic Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Planguard
+        uses: jonathanhle/planguard@v1
+        with:
+          directory: examples/terraform
+          fail-on: error
+
+  # Example 2: Custom config with JSON output
+  custom-config:
+    name: Custom Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Planguard with custom config
+        uses: jonathanhle/planguard@v1
+        with:
+          config: examples/.planguard/config.hcl
+          directory: examples/terraform
+          format: json
+          fail-on: warning
+
+  # Example 3: SARIF output for GitHub Security
+  sarif-security:
+    name: SARIF for Security Tab
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Planguard
+        uses: jonathanhle/planguard@v1
+        with:
+          directory: examples/terraform
+          format: sarif
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: planguard-results.sarif

@@ -25,12 +25,12 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      
+      - uses: actions/checkout@v4
+
       - name: Planguard
         uses: jonathanhle/planguard@v1
         with:
-          config: .planguard/config.hcl
+          directory: terraform/
           fail-on: error
 ```
 

@@ -1,6 +1,6 @@
-name: 'Terraform Planguard'
-description: 'Pre-plan Terraform security scanner with HCL-based configuration'
-author: 'Terraform Planguard'
+name: 'Planguard - Terraform Security Scanner'
+description: 'Pre-plan Terraform security scanner with HCL-based configuration. Catch security issues before terraform plan.'
+author: 'Jonathan Le'
 
 branding:
   icon: 'shield'
