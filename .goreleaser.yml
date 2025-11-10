@@ -105,6 +105,7 @@ brews:
     repository:
       owner: jonathanhle
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     description: "Pre-plan Terraform security scanner"
     homepage: "https://github.com/jonathanhle/planguard"
     license: "MIT"
