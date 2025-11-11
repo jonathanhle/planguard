@@ -1,6 +1,6 @@
 # Planguard 🛡️
 
-Production-ready pre-plan Terraform security scanner with HCL-based configuration. Catch security issues and compliance violations before `terraform plan` runs.
+Pre-plan Terraform security scanner with HCL-based configuration. Catch security issues and compliance violations before `terraform plan` runs.
 
 ## Features
 
@@ -9,7 +9,7 @@ Production-ready pre-plan Terraform security scanner with HCL-based configuratio
 - ✅ **All Terraform functions** - Full support for Terraform expression syntax
 - ✅ **Exception management** - Path-based, time-bound, auditable exceptions
 - ✅ **GitHub Action ready** - Drop-in CI/CD integration
-- ✅ **Fast** - Scans 1000+ files in seconds
+- ✅ **Fast** - Scans large codebases quickly
 - ✅ **Extensible** - Add custom rules without code changes
 - ✅ **Multiple output formats** - Text, JSON, SARIF
 
@@ -65,7 +65,7 @@ settings {
 }
 
 # Use default rules (shipped with Planguard)
-# Default rules cover AWS, Azure, and common patterns
+# Default rules cover AWS and common security patterns
 
 # Add custom rules
 rule "no_public_s3" {
