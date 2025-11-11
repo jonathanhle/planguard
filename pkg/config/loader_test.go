@@ -623,3 +623,332 @@ rule "with_refs" {
 		t.Errorf("Expected 2 references, got %d", len(rules[0].References))
 	}
 }
+
+func TestLoadDefaultRulesWithCategories(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create provider subdirectories
+	awsDir := filepath.Join(tmpDir, "aws")
+	azureDir := filepath.Join(tmpDir, "azure")
+	commonDir := filepath.Join(tmpDir, "common")
+
+	if err := os.MkdirAll(awsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(azureDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(commonDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create root rule
+	rootRule := filepath.Join(tmpDir, "root.hcl")
+	rootContent := `
+rule "root_rule" {
+  name     = "Root Rule"
+  severity = "error"
+  resource_type = "*"
+  condition {
+    expression = "true"
+  }
+  message = "Root"
+}
+`
+	if err := os.WriteFile(rootRule, []byte(rootContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create AWS rule
+	awsRule := filepath.Join(awsDir, "aws.hcl")
+	awsContent := `
+rule "aws_rule" {
+  name     = "AWS Rule"
+  severity = "error"
+  resource_type = "aws_*"
+  condition {
+    expression = "true"
+  }
+  message = "AWS"
+}
+`
+	if err := os.WriteFile(awsRule, []byte(awsContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create Azure rule
+	azureRule := filepath.Join(azureDir, "azure.hcl")
+	azureContent := `
+rule "azure_rule" {
+  name     = "Azure Rule"
+  severity = "error"
+  resource_type = "azurerm_*"
+  condition {
+    expression = "true"
+  }
+  message = "Azure"
+}
+`
+	if err := os.WriteFile(azureRule, []byte(azureContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create security rule
+	securityRule := filepath.Join(commonDir, "security.hcl")
+	securityContent := `
+rule "security_rule" {
+  name     = "Security Rule"
+  severity = "error"
+  resource_type = "*"
+  condition {
+    expression = "true"
+  }
+  message = "Security"
+}
+`
+	if err := os.WriteFile(securityRule, []byte(securityContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create tagging rule
+	taggingRule := filepath.Join(commonDir, "tagging.hcl")
+	taggingContent := `
+rule "tagging_rule" {
+  name     = "Tagging Rule"
+  severity = "warning"
+  resource_type = "*"
+  condition {
+    expression = "true"
+  }
+  message = "Tagging"
+}
+`
+	if err := os.WriteFile(taggingRule, []byte(taggingContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		categories []string
+		wantRules  []string
+	}{
+		{
+			name:       "All rules (nil categories)",
+			categories: nil,
+			wantRules:  []string{"root_rule", "aws_rule", "azure_rule", "security_rule", "tagging_rule"},
+		},
+		{
+			name:       "All rules (empty categories)",
+			categories: []string{},
+			wantRules:  []string{"root_rule", "aws_rule", "azure_rule", "security_rule", "tagging_rule"},
+		},
+		{
+			name:       "AWS only",
+			categories: []string{"aws"},
+			wantRules:  []string{"root_rule", "aws_rule"},
+		},
+		{
+			name:       "Azure only",
+			categories: []string{"azure"},
+			wantRules:  []string{"root_rule", "azure_rule"},
+		},
+		{
+			name:       "Security only",
+			categories: []string{"security"},
+			wantRules:  []string{"root_rule", "security_rule"},
+		},
+		{
+			name:       "Tagging only",
+			categories: []string{"tagging"},
+			wantRules:  []string{"root_rule", "tagging_rule"},
+		},
+		{
+			name:       "Common (all common rules)",
+			categories: []string{"common"},
+			wantRules:  []string{"root_rule", "security_rule", "tagging_rule"},
+		},
+		{
+			name:       "AWS and security",
+			categories: []string{"aws", "security"},
+			wantRules:  []string{"root_rule", "aws_rule", "security_rule"},
+		},
+		{
+			name:       "Multiple categories",
+			categories: []string{"aws", "azure", "tagging"},
+			wantRules:  []string{"root_rule", "aws_rule", "azure_rule", "tagging_rule"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rules, err := LoadDefaultRulesWithCategories(tmpDir, tt.categories)
+			if err != nil {
+				t.Fatalf("LoadDefaultRulesWithCategories() error = %v", err)
+			}
+
+			if len(rules) != len(tt.wantRules) {
+				t.Errorf("Expected %d rules, got %d", len(tt.wantRules), len(rules))
+			}
+
+			// Verify we got the expected rules
+			ruleIDs := make(map[string]bool)
+			for _, rule := range rules {
+				ruleIDs[rule.ID] = true
+			}
+
+			for _, expected := range tt.wantRules {
+				if !ruleIDs[expected] {
+					t.Errorf("Missing expected rule: %s", expected)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfigWithPresuppliedRulesSettings(t *testing.T) {
+	tests := []struct {
+		name                   string
+		configContent          string
+		wantUsePresupplied     bool
+		wantCategories         []string
+		wantUsePresuppliedNil  bool
+	}{
+		{
+			name: "use_presupplied_rules = false",
+			configContent: `
+settings {
+  use_presupplied_rules = false
+}
+`,
+			wantUsePresupplied: false,
+			wantCategories:     []string{},
+		},
+		{
+			name: "use_presupplied_rules = true",
+			configContent: `
+settings {
+  use_presupplied_rules = true
+}
+`,
+			wantUsePresupplied: true,
+			wantCategories:     []string{},
+		},
+		{
+			name: "presupplied_rules_categories with single category",
+			configContent: `
+settings {
+  presupplied_rules_categories = ["security"]
+}
+`,
+			wantUsePresupplied: true, // default
+			wantCategories:     []string{"security"},
+		},
+		{
+			name: "presupplied_rules_categories with multiple categories",
+			configContent: `
+settings {
+  presupplied_rules_categories = ["security", "aws", "tagging"]
+}
+`,
+			wantUsePresupplied: true, // default
+			wantCategories:     []string{"security", "aws", "tagging"},
+		},
+		{
+			name: "Both settings specified",
+			configContent: `
+settings {
+  use_presupplied_rules = true
+  presupplied_rules_categories = ["aws"]
+}
+`,
+			wantUsePresupplied: true,
+			wantCategories:     []string{"aws"},
+		},
+		{
+			name: "No presupplied rules settings (defaults)",
+			configContent: `
+settings {
+  fail_on_warning = false
+}
+`,
+			wantUsePresupplied: true, // default
+			wantCategories:     []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configPath := filepath.Join(tmpDir, "config.hcl")
+
+			err := os.WriteFile(configPath, []byte(tt.configContent), 0644)
+			if err != nil {
+				t.Fatalf("Failed to create test config: %v", err)
+			}
+
+			cfg, err := LoadConfig(configPath)
+			if err != nil {
+				t.Fatalf("LoadConfig() error = %v", err)
+			}
+
+			// Verify UsePresuppliedRules
+			if cfg.Settings.UsePresuppliedRules == nil {
+				t.Error("UsePresuppliedRules should not be nil")
+			} else if *cfg.Settings.UsePresuppliedRules != tt.wantUsePresupplied {
+				t.Errorf("UsePresuppliedRules = %v, want %v", *cfg.Settings.UsePresuppliedRules, tt.wantUsePresupplied)
+			}
+
+			// Verify PresuppliedRulesCategories
+			if len(cfg.Settings.PresuppliedRulesCategories) != len(tt.wantCategories) {
+				t.Errorf("PresuppliedRulesCategories length = %d, want %d",
+					len(cfg.Settings.PresuppliedRulesCategories), len(tt.wantCategories))
+			}
+
+			for i, cat := range tt.wantCategories {
+				if i >= len(cfg.Settings.PresuppliedRulesCategories) {
+					t.Errorf("Missing category: %s", cat)
+					continue
+				}
+				if cfg.Settings.PresuppliedRulesCategories[i] != cat {
+					t.Errorf("Category[%d] = %s, want %s",
+						i, cfg.Settings.PresuppliedRulesCategories[i], cat)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfigPresuppliedRulesDefaults(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.hcl")
+
+	// Empty config should get defaults
+	err := os.WriteFile(configPath, []byte(""), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test config: %v", err)
+	}
+
+	cfg, err := LoadConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+
+	// Verify defaults
+	if cfg.Settings == nil {
+		t.Fatal("Settings should not be nil")
+	}
+
+	if cfg.Settings.UsePresuppliedRules == nil {
+		t.Error("UsePresuppliedRules should have default value")
+	} else if *cfg.Settings.UsePresuppliedRules != true {
+		t.Error("Default UsePresuppliedRules should be true")
+	}
+
+	if cfg.Settings.PresuppliedRulesCategories == nil {
+		t.Error("PresuppliedRulesCategories should not be nil")
+	}
+	if len(cfg.Settings.PresuppliedRulesCategories) != 0 {
+		t.Errorf("Default PresuppliedRulesCategories should be empty, got %d items",
+			len(cfg.Settings.PresuppliedRulesCategories))
+	}
+}
