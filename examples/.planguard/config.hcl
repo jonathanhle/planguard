@@ -1,5 +1,44 @@
 # Planguard Configuration
-# This file allows you to configure exceptions for specific rules
+# This file allows you to configure settings, rules, and exceptions
+
+# ====================================================================
+# SETTINGS
+# ====================================================================
+# Global configuration settings for Planguard
+
+settings {
+  # Fail on warnings (default: false)
+  # Set to true to exit with non-zero code when warnings are found
+  fail_on_warning = false
+
+  # Exclude paths from scanning (supports glob patterns)
+  exclude_paths = [
+    "**/.terraform/**",
+    "**/node_modules/**"
+  ]
+
+  # Presupplied rules control (default: true)
+  # Set to false to disable all presupplied (built-in) rules
+  # and only use custom rules defined in this config or rules directory
+  use_presupplied_rules = true
+
+  # Presupplied rules categories (optional)
+  # If specified, only load presupplied rules from these categories.
+  # If empty or not specified, all presupplied rules are loaded.
+  # Available categories:
+  #   - "aws": AWS provider rules (S3, IAM, RDS, EC2, etc.)
+  #   - "azure": Azure provider rules
+  #   - "common": All common rules (security + tagging)
+  #   - "security": Security-specific rules (exfiltration prevention)
+  #   - "tagging": Resource tagging compliance rules
+  #
+  # Examples:
+  #   presupplied_rules_categories = ["security", "aws"]  # Only security and AWS rules
+  #   presupplied_rules_categories = ["security"]         # Only security rules
+  #   presupplied_rules_categories = []                   # All rules (default)
+  #
+  # presupplied_rules_categories = ["security", "aws"]
+}
 
 # ====================================================================
 # EXCEPTION EXAMPLES

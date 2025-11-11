@@ -19,9 +19,21 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Set defaults
 	if config.Settings == nil {
+		defaultUsePresuppliedRules := true
 		config.Settings = &Settings{
-			FailOnWarning: false,
-			ExcludePaths:  []string{},
+			FailOnWarning:              false,
+			ExcludePaths:               []string{},
+			UsePresuppliedRules:        &defaultUsePresuppliedRules,
+			PresuppliedRulesCategories: []string{},
+		}
+	} else {
+		// Set default for UsePresuppliedRules if not specified
+		if config.Settings.UsePresuppliedRules == nil {
+			defaultUsePresuppliedRules := true
+			config.Settings.UsePresuppliedRules = &defaultUsePresuppliedRules
+		}
+		if config.Settings.PresuppliedRulesCategories == nil {
+			config.Settings.PresuppliedRulesCategories = []string{}
 		}
 	}
 
@@ -79,6 +91,18 @@ func LoadRules(rulesPaths []string) ([]Rule, error) {
 
 // LoadDefaultRules loads built-in default rules
 func LoadDefaultRules(rulesDir string) ([]Rule, error) {
+	return LoadDefaultRulesWithCategories(rulesDir, nil)
+}
+
+// LoadDefaultRulesWithCategories loads built-in default rules filtered by categories
+// Supported categories:
+//   - "aws": AWS provider rules (rules/aws/*.hcl)
+//   - "azure": Azure provider rules (rules/azure/*.hcl)
+//   - "common": All common rules (rules/common/*.hcl)
+//   - "security": Security-specific rules (rules/common/security.hcl)
+//   - "tagging": Tagging rules (rules/common/tagging.hcl)
+// If categories is nil or empty, all rules are loaded
+func LoadDefaultRulesWithCategories(rulesDir string, categories []string) ([]Rule, error) {
 	if rulesDir == "" {
 		// Use embedded rules or skip
 		return []Rule{}, nil
@@ -86,15 +110,57 @@ func LoadDefaultRules(rulesDir string) ([]Rule, error) {
 
 	var patterns []string
 
-	// Load rules from root directory
-	rootPattern := filepath.Join(rulesDir, "*.hcl")
-	patterns = append(patterns, rootPattern)
+	// If no categories specified, load all rules (backward compatible)
+	if len(categories) == 0 {
+		// Load rules from root directory
+		rootPattern := filepath.Join(rulesDir, "*.hcl")
+		patterns = append(patterns, rootPattern)
 
-	// Load rules from provider subdirectories
-	providers := []string{"aws", "azure", "common"}
-	for _, provider := range providers {
-		pattern := filepath.Join(rulesDir, provider, "*.hcl")
-		patterns = append(patterns, pattern)
+		// Load rules from provider subdirectories
+		providers := []string{"aws", "azure", "common"}
+		for _, provider := range providers {
+			pattern := filepath.Join(rulesDir, provider, "*.hcl")
+			patterns = append(patterns, pattern)
+		}
+	} else {
+		// Load specific categories
+		categoryMap := make(map[string]bool)
+		for _, cat := range categories {
+			categoryMap[cat] = true
+		}
+
+		// Load rules from root directory if any category is specified
+		if len(categoryMap) > 0 {
+			rootPattern := filepath.Join(rulesDir, "*.hcl")
+			patterns = append(patterns, rootPattern)
+		}
+
+		// Map categories to file patterns
+		if categoryMap["aws"] {
+			pattern := filepath.Join(rulesDir, "aws", "*.hcl")
+			patterns = append(patterns, pattern)
+		}
+
+		if categoryMap["azure"] {
+			pattern := filepath.Join(rulesDir, "azure", "*.hcl")
+			patterns = append(patterns, pattern)
+		}
+
+		if categoryMap["common"] {
+			// Load all common rules
+			pattern := filepath.Join(rulesDir, "common", "*.hcl")
+			patterns = append(patterns, pattern)
+		} else {
+			// Load specific common rule files
+			if categoryMap["security"] {
+				pattern := filepath.Join(rulesDir, "common", "security.hcl")
+				patterns = append(patterns, pattern)
+			}
+			if categoryMap["tagging"] {
+				pattern := filepath.Join(rulesDir, "common", "tagging.hcl")
+				patterns = append(patterns, pattern)
+			}
+		}
 	}
 
 	return LoadRules(patterns)

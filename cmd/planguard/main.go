@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jonathanhle/planguard/pkg/config"
 	"github.com/jonathanhle/planguard/pkg/parser"
@@ -21,6 +22,8 @@ func main() {
 	format := flag.String("format", "text", "Output format (text, json, sarif)")
 	failOn := flag.String("fail-on", "error", "Fail on severity level (error, warning, info)")
 	rulesDir := flag.String("rules-dir", "", "Directory containing rules (default: ~/.planguard/rules)")
+	usePresuppliedRules := flag.String("use-presupplied-rules", "", "Enable presupplied rules (true/false, default: true)")
+	presuppliedRulesCategories := flag.String("presupplied-rules-categories", "", "Comma-separated list of presupplied rule categories (aws,azure,common,security,tagging)")
 	showVersion := flag.Bool("version", false, "Show version")
 
 	flag.Parse()
@@ -31,13 +34,13 @@ func main() {
 	}
 
 	// Run scan
-	exitCode := run(*configPath, *directory, *format, *failOn, *rulesDir)
+	exitCode := run(*configPath, *directory, *format, *failOn, *rulesDir, *usePresuppliedRules, *presuppliedRulesCategories)
 	os.Exit(exitCode)
 }
 
-func run(configPath, directory, format, failOn, rulesDir string) int {
+func run(configPath, directory, format, failOn, rulesDir string, usePresuppliedRules string, presuppliedRulesCategories string) int {
 	// Load configuration
-	cfg, err := loadConfiguration(configPath, rulesDir)
+	cfg, err := loadConfiguration(configPath, rulesDir, usePresuppliedRules, presuppliedRulesCategories)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading configuration: %v\n", err)
 		return 1
@@ -149,7 +152,7 @@ func getDefaultRulesDir() (string, error) {
 	return homeDir + "/.planguard/rules", nil
 }
 
-func loadConfiguration(configPath, rulesDir string) (*config.Config, error) {
+func loadConfiguration(configPath, rulesDir string, usePresuppliedRulesStr string, presuppliedRulesCategoriesStr string) (*config.Config, error) {
 	// Expand home directory in paths
 	if configPath != "" {
 		expanded, err := expandHomePath(configPath)
@@ -178,11 +181,6 @@ func loadConfiguration(configPath, rulesDir string) (*config.Config, error) {
 		rulesDir = defaultRulesDir
 	}
 
-	// Check if rules directory exists
-	if _, err := os.Stat(rulesDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("rules directory not found: %s\n\nPlease create it and add rules:\n  mkdir -p %s\n  cp -r /path/to/rules/* %s/\n\nOr specify a different location:\n  planguard -rules-dir /path/to/rules", rulesDir, rulesDir, rulesDir)
-	}
-
 	var cfg *config.Config
 	var err error
 
@@ -194,10 +192,13 @@ func loadConfiguration(configPath, rulesDir string) (*config.Config, error) {
 		}
 	} else {
 		// Create default config
+		defaultUsePresuppliedRules := true
 		cfg = &config.Config{
 			Settings: &config.Settings{
-				FailOnWarning: false,
-				ExcludePaths:  []string{"**/.terraform/**", "**/node_modules/**"},
+				FailOnWarning:              false,
+				ExcludePaths:               []string{"**/.terraform/**", "**/node_modules/**"},
+				UsePresuppliedRules:        &defaultUsePresuppliedRules,
+				PresuppliedRulesCategories: []string{},
 			},
 			Rules:      []config.Rule{},
 			Exceptions: []config.Exception{},
@@ -205,13 +206,56 @@ func loadConfiguration(configPath, rulesDir string) (*config.Config, error) {
 		}
 	}
 
-	// Load rules from directory if not present in config
-	if len(cfg.Rules) == 0 && rulesDir != "" {
-		rules, err := config.LoadDefaultRules(rulesDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load rules from %s: %w", rulesDir, err)
+	// Override config settings with CLI flags (only if explicitly provided)
+	if usePresuppliedRulesStr != "" {
+		usePresuppliedRules := strings.ToLower(usePresuppliedRulesStr) == "true"
+		cfg.Settings.UsePresuppliedRules = &usePresuppliedRules
+	}
+
+	// Parse comma-separated categories from CLI (only if explicitly provided)
+	if presuppliedRulesCategoriesStr != "" {
+		categories := []string{}
+		for _, cat := range strings.Split(presuppliedRulesCategoriesStr, ",") {
+			trimmed := strings.TrimSpace(cat)
+			if trimmed != "" {
+				categories = append(categories, trimmed)
+			}
+		}
+		if len(categories) > 0 {
+			cfg.Settings.PresuppliedRulesCategories = categories
+		}
+	}
+
+	// Check if we should load presupplied rules
+	shouldLoadPresuppliedRules := cfg.Settings.UsePresuppliedRules != nil && *cfg.Settings.UsePresuppliedRules
+
+	// Check if rules directory exists (only if we need to load presupplied rules)
+	if shouldLoadPresuppliedRules {
+		if _, err := os.Stat(rulesDir); os.IsNotExist(err) {
+			return nil, fmt.Errorf("rules directory not found: %s\n\nPlease create it and add rules:\n  mkdir -p %s\n  cp -r /path/to/rules/* %s/\n\nOr specify a different location:\n  planguard -rules-dir /path/to/rules", rulesDir, rulesDir, rulesDir)
+		}
+	}
+
+	// Load presupplied rules if enabled and not already present in config
+	if len(cfg.Rules) == 0 && shouldLoadPresuppliedRules && rulesDir != "" {
+		var rules []config.Rule
+		if len(cfg.Settings.PresuppliedRulesCategories) > 0 {
+			// Load specific categories
+			rules, err = config.LoadDefaultRulesWithCategories(rulesDir, cfg.Settings.PresuppliedRulesCategories)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load presupplied rules from %s: %w", rulesDir, err)
+			}
+			fmt.Fprintf(os.Stderr, "Loaded presupplied rules for categories: %s\n", strings.Join(cfg.Settings.PresuppliedRulesCategories, ", "))
+		} else {
+			// Load all presupplied rules
+			rules, err = config.LoadDefaultRules(rulesDir)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load presupplied rules from %s: %w", rulesDir, err)
+			}
 		}
 		cfg.Rules = rules
+	} else if !shouldLoadPresuppliedRules {
+		fmt.Fprintf(os.Stderr, "Presupplied rules disabled\n")
 	}
 
 	return cfg, nil
