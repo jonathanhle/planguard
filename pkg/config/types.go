@@ -15,9 +15,9 @@ type Config struct {
 
 // Settings contains global configuration
 type Settings struct {
-	FailOnWarning             bool     `hcl:"fail_on_warning,optional"`
-	ExcludePaths              []string `hcl:"exclude_paths,optional"`
-	UsePresuppliedRules       *bool    `hcl:"use_presupplied_rules,optional"`
+	FailOnWarning              bool     `hcl:"fail_on_warning,optional"`
+	ExcludePaths               []string `hcl:"exclude_paths,optional"`
+	UsePresuppliedRules        *bool    `hcl:"use_presupplied_rules,optional"`
 	PresuppliedRulesCategories []string `hcl:"presupplied_rules_categories,optional"`
 }
 

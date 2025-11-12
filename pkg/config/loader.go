@@ -101,6 +101,7 @@ func LoadDefaultRules(rulesDir string) ([]Rule, error) {
 //   - "common": All common rules (rules/common/*.hcl)
 //   - "security": Security-specific rules (rules/common/security.hcl)
 //   - "tagging": Tagging rules (rules/common/tagging.hcl)
+//
 // If categories is nil or empty, all rules are loaded
 func LoadDefaultRulesWithCategories(rulesDir string, categories []string) ([]Rule, error) {
 	if rulesDir == "" {

@@ -807,11 +807,11 @@ rule "tagging_rule" {
 
 func TestLoadConfigWithPresuppliedRulesSettings(t *testing.T) {
 	tests := []struct {
-		name                   string
-		configContent          string
-		wantUsePresupplied     bool
-		wantCategories         []string
-		wantUsePresuppliedNil  bool
+		name                  string
+		configContent         string
+		wantUsePresupplied    bool
+		wantCategories        []string
+		wantUsePresuppliedNil bool
 	}{
 		{
 			name: "use_presupplied_rules = false",
