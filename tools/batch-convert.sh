@@ -24,6 +24,22 @@ TERRASCAN_DIR="${1:-/tmp/terrascan}"
 RESOURCE_TYPE="${2:-}"
 DELAY=2  # Seconds between conversions (to avoid rate limits)
 
+# Find the converter binary
+CONVERTER=""
+if command -v convert-terrascan &> /dev/null; then
+    CONVERTER="convert-terrascan"
+elif [ -f "tools/convert-terrascan/convert-terrascan" ]; then
+    CONVERTER="tools/convert-terrascan/convert-terrascan"
+else
+    echo -e "${RED}❌ Error: convert-terrascan binary not found${NC}"
+    echo ""
+    echo "Build it first:"
+    echo "  cd tools/convert-terrascan && make build"
+    echo "Or install it:"
+    echo "  cd tools/convert-terrascan && make install"
+    exit 1
+fi
+
 # Check API key
 if [ -z "$ANTHROPIC_API_KEY" ]; then
     echo -e "${RED}❌ Error: ANTHROPIC_API_KEY environment variable not set${NC}"
@@ -88,7 +104,7 @@ for rego_file in $REGO_FILES; do
     echo -e "${YELLOW}[$CONVERTED/$TOTAL]${NC} Converting: $FILENAME"
 
     # Convert the file
-    if python tools/convert-terrascan.py "$rego_file" 2>&1; then
+    if $CONVERTER -file "$rego_file" 2>&1; then
         echo -e "  ${GREEN}✓${NC} Success"
     else
         echo -e "  ${RED}✗${NC} Failed"

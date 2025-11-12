@@ -4,13 +4,20 @@ Tools for converting security policies from other formats to Planguard HCL rules
 
 ## Terrascan to Planguard Converter
 
-AI-powered tool that converts Terrascan OPA/Rego policies to Planguard HCL rules.
+AI-powered tool written in Go that converts Terrascan OPA/Rego policies to Planguard HCL rules.
 
 ### Setup
 
-1. **Install dependencies:**
+1. **Build the tool:**
    ```bash
-   pip install anthropic
+   cd tools/convert-terrascan
+   make build
+   ```
+
+   Or install to `$GOPATH/bin`:
+   ```bash
+   cd tools/convert-terrascan
+   make install
    ```
 
 2. **Set up API key:**
@@ -25,7 +32,11 @@ AI-powered tool that converts Terrascan OPA/Rego policies to Planguard HCL rules
 #### Convert a Single Policy
 
 ```bash
-python tools/convert-terrascan.py path/to/policy.rego
+# If installed
+convert-terrascan -file path/to/policy.rego
+
+# Or if built locally
+./tools/convert-terrascan/convert-terrascan -file path/to/policy.rego
 ```
 
 This will:
@@ -37,13 +48,13 @@ This will:
 #### Specify Output Location
 
 ```bash
-python tools/convert-terrascan.py s3Versioning.rego --output rules/aws/s3_versioning.hcl
+convert-terrascan -file s3Versioning.rego -output rules/aws/s3_versioning.hcl
 ```
 
 #### Preview Without Saving
 
 ```bash
-python tools/convert-terrascan.py s3Versioning.rego --dry-run
+convert-terrascan -file s3Versioning.rego --dry-run
 ```
 
 ### Batch Conversion
@@ -58,14 +69,18 @@ git clone https://github.com/tenable/terrascan.git /tmp/terrascan
 #### Convert All AWS Policies
 
 ```bash
-# Using find and xargs
+# Using the batch script (recommended)
+./tools/batch-convert.sh /tmp/terrascan
+
+# Or manually with find and xargs
 find /tmp/terrascan/pkg/policies/opa/rego/aws -name "*.rego" | \
-  xargs -I {} python tools/convert-terrascan.py {}
+  xargs -I {} convert-terrascan -file {}
 
 # Or using a loop for more control
 for rego_file in /tmp/terrascan/pkg/policies/opa/rego/aws/**/*.rego; do
   echo "Converting: $rego_file"
-  python tools/convert-terrascan.py "$rego_file"
+  convert-terrascan -file "$rego_file"
+  sleep 2  # Rate limiting
 done
 ```
 
@@ -73,16 +88,13 @@ done
 
 ```bash
 # Just S3 policies
-find /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket -name "*.rego" | \
-  xargs -I {} python tools/convert-terrascan.py {}
+./tools/batch-convert.sh /tmp/terrascan aws_s3_bucket
 
 # RDS policies
-find /tmp/terrascan/pkg/policies/opa/rego/aws/aws_db_instance -name "*.rego" | \
-  xargs -I {} python tools/convert-terrascan.py {}
+./tools/batch-convert.sh /tmp/terrascan aws_db_instance
 
 # IAM policies
-find /tmp/terrascan/pkg/policies/opa/rego/aws/aws_iam_policy -name "*.rego" | \
-  xargs -I {} python tools/convert-terrascan.py {}
+./tools/batch-convert.sh /tmp/terrascan aws_iam_policy
 ```
 
 ### Workflow Example
@@ -91,24 +103,26 @@ find /tmp/terrascan/pkg/policies/opa/rego/aws/aws_iam_policy -name "*.rego" | \
 # 1. Clone Terrascan
 git clone https://github.com/tenable/terrascan.git /tmp/terrascan
 
-# 2. Set API key
+# 2. Build the converter
+cd tools/convert-terrascan && make build && cd ../..
+
+# 3. Set API key
 export ANTHROPIC_API_KEY='sk-ant-...'
 
-# 3. Convert a test policy first
-python tools/convert-terrascan.py \
-  /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket/s3Versioning.rego \
+# 4. Convert a test policy first
+./tools/convert-terrascan/convert-terrascan \
+  -file /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket/s3Versioning.rego \
   --dry-run
 
-# 4. If it looks good, save it
-python tools/convert-terrascan.py \
-  /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket/s3Versioning.rego
+# 5. If it looks good, save it
+./tools/convert-terrascan/convert-terrascan \
+  -file /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket/s3Versioning.rego
 
-# 5. Test the converted rule
+# 6. Test the converted rule
 planguard -config .planguard/config.hcl -directory ./test-terraform
 
-# 6. If it works, batch convert more
-find /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket -name "*.rego" | \
-  head -5 | xargs -I {} python tools/convert-terrascan.py {}
+# 7. If it works, batch convert more
+./tools/batch-convert.sh /tmp/terrascan aws_s3_bucket
 ```
 
 ### What Gets Converted
@@ -136,18 +150,18 @@ The AI converter handles:
 **Start with High-Value Policies:**
 ```bash
 # Security-critical policies first
-python tools/convert-terrascan.py /tmp/terrascan/pkg/policies/opa/rego/aws/aws_iam_policy/iamPolicyDocWildcardResource.rego
-python tools/convert-terrascan.py /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket/s3EnforceUserACL.rego
-python tools/convert-terrascan.py /tmp/terrascan/pkg/policies/opa/rego/aws/aws_db_instance/rdsEncryptionEnabled.rego
+convert-terrascan -file /tmp/terrascan/pkg/policies/opa/rego/aws/aws_iam_policy/iamPolicyDocWildcardResource.rego
+convert-terrascan -file /tmp/terrascan/pkg/policies/opa/rego/aws/aws_s3_bucket/s3EnforceUserACL.rego
+convert-terrascan -file /tmp/terrascan/pkg/policies/opa/rego/aws/aws_db_instance/rdsEncryptionEnabled.rego
 ```
 
 **Iterate on Complex Policies:**
 ```bash
 # Convert with --dry-run first
-python tools/convert-terrascan.py complex_policy.rego --dry-run
+convert-terrascan -file complex_policy.rego --dry-run
 
 # Review output, then save if good
-python tools/convert-terrascan.py complex_policy.rego
+convert-terrascan -file complex_policy.rego
 
 # Test immediately
 planguard -config .planguard/config.hcl -directory ./test-data
@@ -156,8 +170,8 @@ planguard -config .planguard/config.hcl -directory ./test-data
 **Organize by Service:**
 ```bash
 # Keep rules organized
-python tools/convert-terrascan.py s3Policy.rego -o rules/aws/s3/policy_name.hcl
-python tools/convert-terrascan.py rdsPolicy.rego -o rules/aws/rds/policy_name.hcl
+convert-terrascan -file s3Policy.rego -output rules/aws/s3/policy_name.hcl
+convert-terrascan -file rdsPolicy.rego -output rules/aws/rds/policy_name.hcl
 ```
 
 ### Troubleshooting
@@ -171,19 +185,17 @@ echo $ANTHROPIC_API_KEY
 export ANTHROPIC_API_KEY='your-key-here'
 ```
 
-**Module Not Found:**
+**Binary Not Found:**
 ```bash
-pip install anthropic
+# Build it
+cd tools/convert-terrascan && make build
+
+# Or install globally
+cd tools/convert-terrascan && make install
 ```
 
 **Rate Limits:**
-If you hit API rate limits during batch conversion, add a delay:
-```bash
-for rego_file in /tmp/terrascan/pkg/policies/opa/rego/aws/**/*.rego; do
-  python tools/convert-terrascan.py "$rego_file"
-  sleep 2  # Add 2 second delay between conversions
-done
-```
+If you hit API rate limits during batch conversion, the batch script has built-in delays. You can adjust the `DELAY` variable in `batch-convert.sh`.
 
 **Complex Policies:**
 If a conversion doesn't look right:
@@ -200,6 +212,30 @@ Using Claude Sonnet 4.5:
 - **500 policies:** ~$10 - $25
 
 Much faster and cheaper than manual conversion!
+
+### Command Line Options
+
+```
+convert-terrascan [options]
+
+Options:
+  -file string
+        Path to Terrascan Rego policy file (required)
+  -output string
+        Output HCL file path (auto-generated if not specified)
+  -o string
+        Output HCL file path (shorthand)
+  --dry-run
+        Print converted rule to stdout instead of saving
+
+Environment:
+  ANTHROPIC_API_KEY    Your Anthropic API key (required)
+
+Examples:
+  convert-terrascan -file s3Versioning.rego
+  convert-terrascan -file s3Versioning.rego -output rules/aws/s3.hcl
+  convert-terrascan -file s3Versioning.rego --dry-run
+```
 
 ### Next Steps
 

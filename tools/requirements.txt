@@ -1,4 +1,0 @@
-# Python dependencies for Planguard conversion tools
-
-# Anthropic Claude API client
-anthropic>=0.39.0
